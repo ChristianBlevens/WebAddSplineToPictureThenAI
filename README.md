@@ -1,2 +1,2 @@
-# WebAddSplineToPictureThenAI
+# AddSplineToPictureThenAI
  
