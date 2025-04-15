@@ -15,6 +15,7 @@ public class WebCameraManager : MonoBehaviour
     [SerializeField] private Button takePictureButton;
     [SerializeField] private Button captureButton;
     [SerializeField] private Button backButton;
+    [SerializeField] private Button redoButton;
     [SerializeField] private RawImage videoFeedImage;
     [SerializeField] private RawImage resultImage;
 
@@ -63,6 +64,7 @@ public class WebCameraManager : MonoBehaviour
         takePictureButton.onClick.AddListener(OnTakePictureClicked);
         captureButton.onClick.AddListener(OnCaptureClicked);
         backButton.onClick.AddListener(OnBackClicked);
+        redoButton.onClick.AddListener(OnRedoClicked);
 
         // Initialize WebCamera in WebGL
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -124,6 +126,14 @@ public class WebCameraManager : MonoBehaviour
         isCameraActive = false;
         StopWebCamera();
 #endif
+    }
+
+    private void OnRedoClicked()
+    {
+        Debug.Log("Redo clicked");
+        resultPanel.SetActive(false);
+        cameraPanel.SetActive(false);
+        optionsPanel.SetActive(true);
     }
 
     // Receives callbacks from JavaScript
