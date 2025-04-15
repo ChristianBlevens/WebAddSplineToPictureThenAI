@@ -1,48 +1,29 @@
 <!DOCTYPE html>
 <html lang="en-us">
   <head>
-    <meta charset="utf-8" />
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    <title>Unity WebGL | WebAddSplineToPictureThenAI</title>
-    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes" />
-    <style>
-      html, body {
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-        height: 100%;
-        width: 100%;
-        background-color: #231F20;
-      }
-
-      #unity-canvas {
-        display: block;
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        background: #231F20;
-      }
-    </style>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>Unity Web Player | WebAddSplineToPictureThenAI</title>
   </head>
-
-  <body>
-    <canvas id="unity-canvas" tabindex="-1"></canvas>
-
+  <body style="text-align: center; padding: 0; border: 0; margin: 0;">
+    <canvas id="unity-canvas" width=960 height=600 tabindex="-1" style="width: 960px; height: 600px; background: #231F20"></canvas>
     <script src="Build/docs.loader.js"></script>
     <script>
-      const canvas = document.getElementById("unity-canvas");
+      // fill the whole browser client area with the game canvas:
+      var meta = document.createElement('meta');
+      meta.name = 'viewport';
+      meta.content = 'width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes';
+      document.getElementsByTagName('head')[0].appendChild(meta);
 
-      function resizeCanvas() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-      }
+      var canvas = document.querySelector("#unity-canvas");
+      canvas.style.width = "100%";
+      canvas.style.height = "100%";
+      canvas.style.position = "fixed";
 
-      window.addEventListener("resize", resizeCanvas);
-      window.addEventListener("load", resizeCanvas);
+      document.body.style.textAlign = "left";
 
-      createUnityInstance(canvas, {
+      createUnityInstance(document.querySelector("#unity-canvas"), {
+        arguments: [],
         dataUrl: "Build/docs.data.gz",
         frameworkUrl: "Build/docs.framework.js.gz",
         codeUrl: "Build/docs.wasm.gz",
@@ -50,9 +31,8 @@
         companyName: "DefaultCompany",
         productName: "WebAddSplineToPictureThenAI",
         productVersion: "0.1.0",
-        // Uncomment if you want Unity to keep internal rendering resolution separate from canvas:
-        // matchWebGLToCanvasSize: false,
-        // devicePixelRatio: 1,
+        // matchWebGLToCanvasSize: false, // Uncomment this to separately control WebGL canvas render size and DOM element size.
+        // devicePixelRatio: 1, // Uncomment this to override low DPI rendering on high DPI displays.
       });
     </script>
   </body>
