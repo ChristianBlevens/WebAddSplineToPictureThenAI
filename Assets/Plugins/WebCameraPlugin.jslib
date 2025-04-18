@@ -23,6 +23,7 @@ mergeInto(LibraryManager.library, {
     document.body.appendChild(video);
     
     // Create hidden canvas for capturing frames
+    // Using the dimensions passed from Unity (from the RectTransform)
     var canvas = document.createElement('canvas');
     canvas.id = 'unity-webcam-canvas';
     canvas.width = width;
@@ -35,6 +36,33 @@ mergeInto(LibraryManager.library, {
     
     // Set up interval to send frames to Unity when camera is active
     window.unityWebCamera.frameInterval = null;
+  },
+  
+  // New function to update canvas size after initialization
+  UpdateCanvasSize: function (width, height) {
+    if (!window.unityWebCamera || !window.unityWebCamera.canvas) {
+      console.error("Cannot update canvas size: Camera not initialized");
+      return;
+    }
+    
+    // Update stored dimensions
+    window.unityWebCamera.width = width;
+    window.unityWebCamera.height = height;
+    
+    // Update canvas dimensions
+    window.unityWebCamera.canvas.width = width;
+    window.unityWebCamera.canvas.height = height;
+    
+    console.log("Canvas size updated to: " + width + "x" + height);
+    
+    // If the camera is active, send a notification that the size has changed
+    if (window.unityWebCamera.active) {
+      SendMessage(
+        window.unityWebCamera.objectName,
+        window.unityWebCamera.functionName,
+        "CANVAS_RESIZED:" + width + "x" + height
+      );
+    }
   },
   
   StartWebCamera: function () {
@@ -115,37 +143,6 @@ mergeInto(LibraryManager.library, {
     }
     
     window.unityWebCamera.active = false;
-  },
-  
-  CaptureWebCameraImage: function () {
-    if (!window.unityWebCamera || !window.unityWebCamera.stream) return;
-    
-    try {
-      var video = window.unityWebCamera.video;
-      var canvas = window.unityWebCamera.canvas;
-      var ctx = canvas.getContext('2d');
-      
-      // Draw current video frame to canvas
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
-      // Get image as base64 data URL
-      var imageDataUrl = canvas.toDataURL('image/png');
-      var base64Data = imageDataUrl.split(',')[1];
-      
-      // Send captured image to Unity
-      SendMessage(
-        window.unityWebCamera.objectName, 
-        window.unityWebCamera.functionName,
-        "IMAGE_CAPTURED:" + base64Data
-      );
-    } catch (err) {
-      console.error("Error capturing camera image:", err);
-      SendMessage(
-        window.unityWebCamera.objectName,
-        window.unityWebCamera.functionName,
-        "CAMERA_ERROR:Failed to capture image"
-      );
-    }
   },
   
   ShowFilePickerDialog: function() {
