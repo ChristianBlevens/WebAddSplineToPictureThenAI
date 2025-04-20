@@ -1,11 +1,9 @@
 using UnityEngine;
 using System.Collections.Generic;
+
 public class ChristmasLightSpline : MonoBehaviour
 {
     private List<Vector2> controlPoints = new List<Vector2>();
-    private Material splineMaterial;
-    private Color splineColor;
-    private float splineWidth;
     private LineRenderer lineRenderer;
     private float startDepth = 0.5f;
     private float endDepth = 0.5f;
@@ -14,33 +12,24 @@ public class ChristmasLightSpline : MonoBehaviour
     public List<Vector2> ControlPoints => controlPoints;
     public float TotalLength => totalLength;
 
-    public void Initialize(List<Vector2> points, Material material, Color color, float width)
+    public void Initialize(List<Vector2> points, Material material, Color color, float width, float startDepthValue, float endDepthValue)
     {
         controlPoints = new List<Vector2>(points);
-        splineMaterial = material;
-        splineColor = color;
-        splineWidth = width;
-        CreateLineRenderer();
+        startDepth = startDepthValue;
+        endDepth = endDepthValue;
+
+        CreateLineRenderer(material, color, width);
         CalculateLength();
     }
 
-    public void SetDepthGradient(float start, float end)
-    {
-        startDepth = start;
-        endDepth = end;
-
-        // Apply depth changes to the renderer
-        UpdateSplineVisuals();
-    }
-
-    private void CreateLineRenderer()
+    private void CreateLineRenderer(Material material, Color color, float width)
     {
         lineRenderer = gameObject.AddComponent<LineRenderer>();
-        lineRenderer.material = splineMaterial;
-        lineRenderer.startColor = splineColor;
-        lineRenderer.endColor = splineColor;
-        lineRenderer.startWidth = splineWidth;
-        lineRenderer.endWidth = splineWidth;
+        lineRenderer.material = material;
+        lineRenderer.startColor = color;
+        lineRenderer.endColor = color;
+        lineRenderer.startWidth = width;
+        lineRenderer.endWidth = width;
         lineRenderer.positionCount = controlPoints.Count;
 
         UpdateSplineVisuals();
@@ -55,7 +44,7 @@ public class ChristmasLightSpline : MonoBehaviour
         for (int i = 0; i < controlPoints.Count; i++)
         {
             // Calculate z position based on depth gradient
-            float t = (float)i / (controlPoints.Count - 1);
+            float t = (float)i / (controlPoints.Count > 1 ? controlPoints.Count - 1 : 1);
             float depth = Mathf.Lerp(startDepth, endDepth, t);
 
             Vector3 position = new Vector3(controlPoints[i].x, controlPoints[i].y, depth * 5f); // Multiply by 5 for visual effect

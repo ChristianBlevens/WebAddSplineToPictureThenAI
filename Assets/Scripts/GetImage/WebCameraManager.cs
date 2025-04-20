@@ -80,7 +80,7 @@ public class WebCameraManager : MonoBehaviour
         videoTexture.Reinitialize(currentWidth, currentHeight);
 
         videoFeedImage.texture = videoTexture;
-        GameObject.Find("RawImage").GetComponent<RawImage>().texture = new Texture2D(currentWidth, currentHeight, TextureFormat.RGBA32, false);
+        GameObject.Find("UnprocessedImage").GetComponent<RawImage>().texture = new Texture2D(currentWidth, currentHeight, TextureFormat.RGBA32, false);
     }
 
     // Calculate dimensions based on UI and scaling factors
@@ -280,7 +280,7 @@ public class WebCameraManager : MonoBehaviour
         Debug.Log("Capture clicked");
 
         // Copy video texture to result texture
-        Graphics.CopyTexture(videoTexture, GameObject.Find("RawImage").GetComponent<RawImage>().texture);
+        Graphics.CopyTexture(videoTexture, GameObject.Find("UnprocessedImage").GetComponent<RawImage>().texture);
 
         // Go to the process image scene
         SceneManager.LoadScene("ProcessImage");

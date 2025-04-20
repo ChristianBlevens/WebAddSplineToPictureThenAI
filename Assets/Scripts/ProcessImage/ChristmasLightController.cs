@@ -2,12 +2,13 @@ using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 public class ChristmasLightController : MonoBehaviour
 {
     [Header("References")]
     [SerializeField] private RawImage targetImage;
-    [SerializeField] private RawImage LineImage;
+    [SerializeField] private RawImage lineImage;
     [SerializeField] private RectTransform splineLayerRect;
     [SerializeField] private GameObject lightPrefab;
     [SerializeField] private Material splineMaterial;
@@ -21,7 +22,6 @@ public class ChristmasLightController : MonoBehaviour
     [Header("Light Settings")]
     [SerializeField] private float lightSpacing = 20f;
     [SerializeField] private float lightScale = 1f;
-    [SerializeField] private bool animateLights = true;
     [SerializeField] private float animationSpeed = 1f;
     [SerializeField]
     private Color[] lightColors = new Color[] {
@@ -29,16 +29,13 @@ public class ChristmasLightController : MonoBehaviour
     };
 
     [Header("Spline Settings")]
-    [SerializeField] private int splineSegments = 100;
     [SerializeField] private float splineWidth = 2f;
     [SerializeField] private Color splineColor = Color.white;
-    [SerializeField] private float depthInfluence = 1f;
-    [SerializeField] private float maximumDepthVariation = 0.5f;
 
     // Components
     private EdgeDetectionUtility edgeDetector;
-    private SplineEditor splineEditor;
-    private ChristmasLightGenerator lightGenerator;
+    private SplineManager splineManager;
+    private LightManager lightManager;
 
     // Data
     private Texture2D sourceTexture;
@@ -46,29 +43,52 @@ public class ChristmasLightController : MonoBehaviour
 
     private void Awake()
     {
-        GameObject rawImage = GameObject.Find("GottenImage");
-
-        if (rawImage == null)
-            targetImage.texture = new Texture2D(1000, 1000, TextureFormat.RGBA32, false);
+        // Get source image
+        GameObject UnprocessedImage = GameObject.Find("UnprocessedImage");
+        if (UnprocessedImage == null)
+            targetImage.texture = (Texture2D)Resources.Load("DefaultHouse");
         else
-            targetImage.texture = rawImage.GetComponent<RawImage>().texture;
+            targetImage.texture = UnprocessedImage.GetComponent<RawImage>().texture;
 
         // Initialize components
         edgeDetector = new EdgeDetectionUtility();
         edgeDetector.SetThreshold(edgeDetectionThreshold);
 
-        // Get components
-        splineEditor = GameObject.Find("RawImage").GetComponent<SplineEditor>();
-        lightGenerator = GetComponent<ChristmasLightGenerator>();
+        lightManager = new LightManager(lightPrefab, lightSpacing, lightScale, animationSpeed, lightColors);
 
-        // Initialize editor and light generator
-        splineEditor.Initialize(targetImage, lineTexture, splineLayerRect, lightGenerator, splineMaterial, splineColor, splineWidth, playerInput);
-        lightGenerator.SetSettings(lightPrefab, lightSpacing, lightScale, animateLights, animationSpeed, lightColors);
+        // Initialize spline manager with correct dependencies
+        splineManager = new SplineManager(
+            targetImage,
+            splineLayerRect,
+            splineMaterial,
+            splineColor,
+            splineWidth,
+            snapDistance,
+            playerInput,
+            lightManager);
     }
 
     private void Start()
     {
+        // Set up UI callbacks
+        SetupUICallbacks();
+
         ProcessImage();
+    }
+
+    private void SetupUICallbacks()
+    {
+        ProcessImageUI.undoButton.onClick.AddListener(UndoLastSpline);
+
+        ProcessImageUI.clearButton.onClick.AddListener(ClearAllSplines);
+
+        ProcessImageUI.speedSlider.onValueChanged.AddListener((value) => lightManager.UpdateAnimationSpeed(value));
+
+        ProcessImageUI.animateToggle.onValueChanged.AddListener((isOn) => lightManager.SetAnimationEnabled(isOn));
+
+        ProcessImageUI.retakeButton.onClick.AddListener(RetakeImage);
+
+        ProcessImageUI.saveButton.onClick.AddListener(SaveImage);
     }
 
     public void ProcessImage()
@@ -76,53 +96,57 @@ public class ChristmasLightController : MonoBehaviour
         if (targetImage == null || targetImage.texture == null) return;
 
         // Get readable texture
-        sourceTexture = GetReadableTexture((Texture2D)targetImage.texture);
+        sourceTexture = TextureUtility.GetReadableTexture((Texture2D)targetImage.texture);
 
         // Process the image to get line texture with depth
         lineTexture = edgeDetector.ProcessImageToLineTexture(sourceTexture);
 
-        // Pass the line texture to the spline editor
-        splineEditor.SetLineTexture(lineTexture);
+        // Pass the line texture to the spline manager
+        splineManager.SetLineTexture(lineTexture);
 
         // Visualize detected edges if needed
-        if (visualizeEdges)
+        if (visualizeEdges && lineImage != null)
         {
-            // Option to show the direct line texture
-            LineImage.texture = lineTexture;
+            lineImage.texture = lineTexture;
         }
     }
 
-    private Texture2D GetReadableTexture(Texture2D source)
+    public void UndoLastSpline()
     {
-        // Create a temporary RenderTexture
-        RenderTexture renderTexture = RenderTexture.GetTemporary(
-            source.width,
-            source.height,
-            0,
-            RenderTextureFormat.Default,
-            RenderTextureReadWrite.Linear
-        );
+        splineManager.RemoveLastSpline();
+    }
 
-        // Copy the source texture to the render texture
-        Graphics.Blit(source, renderTexture);
+    public void ClearAllSplines()
+    {
+        splineManager.ClearAllSplines();
+        lightManager.ClearAllLights();
+    }
 
-        // Create a readable texture
-        Texture2D readableTexture = new Texture2D(source.width, source.height, TextureFormat.RGBA32, false);
+    public void SetSnapDistance(float distance)
+    {
+        snapDistance = distance;
+        splineManager.SetSnapDistance(distance);
+    }
 
-        // Store the active render texture
-        RenderTexture previous = RenderTexture.active;
-        RenderTexture.active = renderTexture;
+    public void SetLightSpacing(float spacing)
+    {
+        lightSpacing = spacing;
+        lightManager.SetLightSpacing(spacing);
+    }
 
-        // Read pixels from render texture to the readable texture
-        readableTexture.ReadPixels(new Rect(0, 0, renderTexture.width, renderTexture.height), 0, 0);
-        readableTexture.Apply();
+    public void SetLightScale(float scale)
+    {
+        lightScale = scale;
+        lightManager.SetLightScale(scale);
+    }
 
-        // Restore the active render texture
-        RenderTexture.active = previous;
+    public void RetakeImage()
+    {
+        SceneManager.LoadScene("GetImage");
+    }
 
-        // Release the temporary render texture
-        RenderTexture.ReleaseTemporary(renderTexture);
+    public void SaveImage()
+    {
 
-        return readableTexture;
     }
 }

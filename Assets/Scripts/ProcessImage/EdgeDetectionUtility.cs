@@ -4,11 +4,11 @@ using System.Linq;
 
 public class EdgeDetectionUtility
 {
-    // Parameters for edge detection
+    // Configurable parameters
     private float sobelThreshold = 0.1f;
+    private float houghThreshold = 10f;
     private int minLineLength = 20;
     private float maxLineGap = 5f;
-    private float houghThreshold = 10f;
 
     // Sobel operator kernels
     private static readonly int[,] SobelX = new int[,] {
@@ -23,9 +23,10 @@ public class EdgeDetectionUtility
         {  1,  2,  1 }
     };
 
+    // Allows adjustment of edge detection sensitivity
     public void SetThreshold(float threshold)
     {
-        sobelThreshold = threshold;
+        sobelThreshold = Mathf.Clamp01(threshold);
     }
 
     // Main method to process an image and return a texture with lines
@@ -41,23 +42,20 @@ public class EdgeDetectionUtility
         Color[] transparentPixels = new Color[sourceImage.width * sourceImage.height];
         for (int i = 0; i < transparentPixels.Length; i++)
         {
-            transparentPixels[i] = new Color(0, 0, 0, 0); // Fully transparent
+            transparentPixels[i] = Color.clear; // Fully transparent
         }
         lineTexture.SetPixels(transparentPixels);
 
-        // Step 3: Detect and draw lines directly to texture
-        DrawLinesDirectlyToTexture(edgeTexture, lineTexture);
+        // Step 3: Detect and draw lines
+        DetectAndDrawLines(edgeTexture, lineTexture);
 
         lineTexture.Apply();
         return lineTexture;
     }
 
-    // Apply edge detection to a texture
+    // Apply Sobel edge detection to a texture
     private Texture2D DetectEdges(Texture2D source)
     {
-        if (source == null) return null;
-
-        // Create output texture
         Texture2D edgeTexture = new Texture2D(source.width, source.height, TextureFormat.RGBA32, false);
         Color[] pixelColors = new Color[source.width * source.height];
 
@@ -102,11 +100,9 @@ public class EdgeDetectionUtility
         return edgeTexture;
     }
 
-    // Detect and draw lines directly to output texture without storing ImageLine objects
-    private void DrawLinesDirectlyToTexture(Texture2D edgeTexture, Texture2D outputTexture)
+    // Detect and draw lines using Hough transform
+    private void DetectAndDrawLines(Texture2D edgeTexture, Texture2D outputTexture)
     {
-        if (edgeTexture == null) return;
-
         // Collect edge points
         List<Vector2> edgePoints = new List<Vector2>();
         for (int y = 0; y < edgeTexture.height; y++)
@@ -129,7 +125,7 @@ public class EdgeDetectionUtility
         // Create accumulator
         int[,] accumulator = new int[thetaResolution, rhoSteps];
 
-        // Fill accumulator
+        // Fill accumulator with votes from edge points
         foreach (Vector2 point in edgePoints)
         {
             for (int thetaIndex = 0; thetaIndex < thetaResolution; thetaIndex++)
@@ -148,7 +144,7 @@ public class EdgeDetectionUtility
             }
         }
 
-        // List to store temporary line data for merging
+        // Store detected lines
         List<LineData> lineDataList = new List<LineData>();
 
         // Find peaks in the accumulator
@@ -193,7 +189,7 @@ public class EdgeDetectionUtility
                         Vector2 direction = end - start;
                         float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
 
-                        // Store temporary line data
+                        // Store line data
                         lineDataList.Add(new LineData(start, end, angle, lineLength));
                     }
 
@@ -206,18 +202,10 @@ public class EdgeDetectionUtility
         // Merge similar lines
         List<LineData> mergedLines = MergeLines(lineDataList);
 
-        // Calculate depth for each line
-        EstimateDepthForLines(mergedLines, edgeTexture.height);
-
-        // Draw lines directly to output texture with depth as black shade
+        // Draw lines with white color
+        Color lineColor = Color.white;
         foreach (LineData line in mergedLines)
         {
-            // Convert depth (0-1) to color intensity (0-255)
-            // 0 depth = black (0), 1 depth = lighter gray (100)
-            byte colorValue = (byte)Mathf.Clamp(line.depth * 100, 0, 255);
-            Color lineColor = new Color32(colorValue, colorValue, colorValue, 255); // Full alpha
-
-            // Draw the line
             DrawLine(outputTexture, (int)line.start.x, (int)line.start.y,
                     (int)line.end.x, (int)line.end.y, lineColor);
         }
@@ -230,7 +218,6 @@ public class EdgeDetectionUtility
         public Vector2 end;
         public float angle;
         public float length;
-        public float depth;
 
         public LineData(Vector2 start, Vector2 end, float angle, float length)
         {
@@ -238,55 +225,6 @@ public class EdgeDetectionUtility
             this.end = end;
             this.angle = angle;
             this.length = length;
-            this.depth = 0.5f; // Default depth
-        }
-
-        // Calculate distance from line to point
-        public float DistanceToPoint(Vector2 point)
-        {
-            // Line equation: ax + by + c = 0
-            float a = end.y - start.y;
-            float b = start.x - end.x;
-            float c = end.x * start.y - start.x * end.y;
-
-            // Distance from point to line
-            return Mathf.Abs(a * point.x + b * point.y + c) / Mathf.Sqrt(a * a + b * b);
-        }
-    }
-
-    // Fix for CS1612: Cannot modify the return value of 'List<EdgeDetectionUtility.LineData>.this[int]' because it is not a variable
-
-    // Update the EstimateDepthForLines method to use a temporary variable for the LineData struct
-    private void EstimateDepthForLines(List<LineData> lines, int imageHeight)
-    {
-        for (int i = 0; i < lines.Count; i++)
-        {
-            // Copy the LineData struct to a temporary variable
-            LineData line = lines[i];
-
-            // Get average Y position (normalized 0-1)
-            float avgY = (line.start.y + line.end.y) / (2f * imageHeight);
-
-            // Convert to depth (higher Y means further away in a typical photo of a house)
-            float positionDepth = avgY;
-
-            // Line orientation factor (horizontal = 1, vertical = 0)
-            float horizontalness = Mathf.Abs(Mathf.Cos(line.angle * Mathf.Deg2Rad));
-
-            // Length factor (longer lines might be closer)
-            float normalizedLength = Mathf.Clamp01(line.length / 100f);
-            float lengthFactor = 1f - normalizedLength * 0.3f;
-
-            // Combine factors
-            float depth = positionDepth * 0.6f +  // Position factor (60%)
-                          horizontalness * 0.3f +  // Orientation factor (30%)
-                          lengthFactor * 0.1f;    // Length factor (10%)
-
-            // Clamp result
-            line.depth = Mathf.Clamp01(depth);
-
-            // Write the modified struct back to the list
-            lines[i] = line;
         }
     }
 

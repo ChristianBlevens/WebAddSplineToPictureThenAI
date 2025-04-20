@@ -3,20 +3,20 @@ using UnityEngine.UI;
 using UnityEngine.InputSystem;
 using System.Collections.Generic;
 
-public class SplineEditor : MonoBehaviour
+public class SplineManager
 {
     private RawImage targetImage;
     private RectTransform splineLayerRect;
-    private ChristmasLightGenerator lightGenerator;
     private Material splineMaterial;
     private Color splineColor;
     private float splineWidth;
-    private float snapDistance = 20f;
+    private float snapDistance;
+    private LightManager lightManager;
 
-    private Texture2D lineTexture; // Texture containing line data with depth values
-    private List<Vector2> controlPoints = new List<Vector2>();
+    private Texture2D lineTexture;
     private List<ChristmasLightSpline> splines = new List<ChristmasLightSpline>();
 
+    private List<Vector2> controlPoints = new List<Vector2>();
     private Vector2 startPoint;
     private Vector2 currentPoint;
     private bool isDrawing = false;
@@ -26,23 +26,23 @@ public class SplineEditor : MonoBehaviour
     private PlayerInput playerInput;
     private InputAction interactAction;
 
-    public void Initialize(
+    public SplineManager(
         RawImage image,
-        Texture2D lineImage,
         RectTransform splineLayer,
-        ChristmasLightGenerator lightGen,
         Material material,
         Color color,
         float width,
-        PlayerInput input)
+        float snapDist,
+        PlayerInput input,
+        LightManager lightGen)
     {
         targetImage = image;
-        lineTexture = lineImage;
         splineLayerRect = splineLayer;
-        lightGenerator = lightGen;
         splineMaterial = material;
         splineColor = color;
         splineWidth = width;
+        snapDistance = snapDist;
+        lightManager = lightGen;
         playerInput = input;
 
         // Get target rect
@@ -55,7 +55,7 @@ public class SplineEditor : MonoBehaviour
         uiCamera = Camera.main;
         if (uiCamera == null || !uiCamera.gameObject.CompareTag("MainCamera"))
         {
-            uiCamera = FindFirstObjectByType<Camera>();
+            uiCamera = UnityEngine.Object.FindFirstObjectByType<Camera>();
         }
 
         // Setup input actions
@@ -65,21 +65,21 @@ public class SplineEditor : MonoBehaviour
 
             if (interactAction != null)
             {
-                interactAction.started += ctx => OnInteractStarted(ctx);
-                interactAction.performed += ctx => OnInteractPerformed(ctx);
-                interactAction.canceled += ctx => OnInteractCanceled(ctx);
+                interactAction.started += OnInteractStarted;
+                interactAction.performed += OnInteractPerformed;
+                interactAction.canceled += OnInteractCanceled;
             }
         }
     }
 
-    private void OnDestroy()
+    // Cleanup method to be called when the manager is destroyed
+    public void Cleanup()
     {
-        // Clean up event subscriptions
         if (interactAction != null)
         {
-            interactAction.started -= ctx => OnInteractStarted(ctx);
-            interactAction.performed -= ctx => OnInteractPerformed(ctx);
-            interactAction.canceled -= ctx => OnInteractCanceled(ctx);
+            interactAction.started -= OnInteractStarted;
+            interactAction.performed -= OnInteractPerformed;
+            interactAction.canceled -= OnInteractCanceled;
         }
     }
 
@@ -172,7 +172,6 @@ public class SplineEditor : MonoBehaviour
         isDrawing = false;
     }
 
-    // Public API methods
     public void SetLineTexture(Texture2D texture)
     {
         lineTexture = texture;
@@ -183,7 +182,6 @@ public class SplineEditor : MonoBehaviour
         snapDistance = snapDist;
     }
 
-    // Spline creation methods
     private void SnapToNearestEdge(ref Vector2 point)
     {
         if (lineTexture == null) return;
@@ -243,34 +241,24 @@ public class SplineEditor : MonoBehaviour
 
         // Add the spline component
         ChristmasLightSpline spline = splineObj.AddComponent<ChristmasLightSpline>();
-        spline.Initialize(controlPoints, splineMaterial, splineColor, splineWidth);
 
-        // Add depth information
-        ApplyDepthToSpline(spline);
+        // Get depth information
+        float startDepth = GetEstimatedDepthAtPoint(controlPoints[0]);
+        float endDepth = GetEstimatedDepthAtPoint(controlPoints[controlPoints.Count - 1]);
 
-        // Initialize lights
-        lightGenerator.CreateLightsForSpline(spline);
+        // Initialize spline with all parameters
+        spline.Initialize(controlPoints, splineMaterial, splineColor, splineWidth, startDepth, endDepth);
+
+        // Create lights for this spline
+        lightManager.CreateLightsForSpline(spline);
 
         // Add to list of splines
         splines.Add(spline);
     }
 
-    private void ApplyDepthToSpline(ChristmasLightSpline spline)
-    {
-        // Extract depth information from start and end points
-        Vector2 startPoint = controlPoints[0];
-        Vector2 endPoint = controlPoints[controlPoints.Count - 1];
-
-        float startDepth = GetEstimatedDepthAtPoint(startPoint);
-        float endDepth = GetEstimatedDepthAtPoint(endPoint);
-
-        // Pass depth information to the spline
-        spline.SetDepthGradient(startDepth, endDepth);
-    }
-
     private float GetEstimatedDepthAtPoint(Vector2 point)
     {
-        if (lineTexture == null) return 0;
+        if (lineTexture == null) return 0.5f;
 
         // Convert UI coordinate to texture coordinate
         Vector2 texturePoint = ConvertToTextureSpace(point);
@@ -287,14 +275,14 @@ public class SplineEditor : MonoBehaviour
         // If this exact pixel is a line, use its value
         if (pixelColor.a > 0)
         {
-            // Assuming depth is stored in the red channel from 0-255
+            // Assuming depth is stored in the red channel from 0-1
             return pixelColor.r;
         }
 
         // If not, search neighboring pixels for the closest line
         int searchRadius = Mathf.CeilToInt(snapDistance);
         float minDistance = snapDistance * snapDistance;
-        float closestDepth = 0;
+        float closestDepth = 0.5f;
         bool foundLine = false;
 
         for (int y = -searchRadius; y <= searchRadius; y++)
@@ -355,5 +343,36 @@ public class SplineEditor : MonoBehaviour
             uiPos.x / targetRect.rect.width * targetImage.texture.width,
             uiPos.y / targetRect.rect.height * targetImage.texture.height
         );
+    }
+
+    public void RemoveLastSpline()
+    {
+        if (splines.Count > 0)
+        {
+            int lastIndex = splines.Count - 1;
+            ChristmasLightSpline lastSpline = splines[lastIndex];
+
+            // Remove the lights associated with this spline
+            lightManager.RemoveLightsForSpline(lastSpline.gameObject.name);
+
+            // Destroy the GameObject
+            UnityEngine.Object.Destroy(lastSpline.gameObject);
+
+            // Remove from list
+            splines.RemoveAt(lastIndex);
+        }
+    }
+
+    public void ClearAllSplines()
+    {
+        foreach (ChristmasLightSpline spline in splines)
+        {
+            if (spline != null && spline.gameObject != null)
+            {
+                UnityEngine.Object.Destroy(spline.gameObject);
+            }
+        }
+
+        splines.Clear();
     }
 }
